@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Mapa de Ubicaciones — Ciudad Juárez</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0f14;
+    --panel: #13161e;
+    --border: #1f2433;
+    --accent: #e8ff47;
+    --accent2: #47aaff;
+    --text: #e4e8f0;
+    --muted: #6b7485;
+    --grande: #e8ff47;
+    --mediana: #47aaff;
+    --pequeña: #ff7c47;
+    --micro: #c447ff;
+  }
+
+  html, body { height: 100%; font-family: 'DM Mono', monospace; background: var(--bg); color: var(--text); overflow: hidden; }
+
+  #app { display: flex; height: 100vh; }
+
+  /* SIDEBAR */
+  #sidebar {
+    width: 320px;
+    min-width: 320px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    overflow: hidden;
+  }
+
+  #sidebar-header {
+    padding: 22px 20px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  #sidebar-header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+  }
+
+  #sidebar-header p {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  #counter {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+  #counter span { color: var(--accent); font-weight: 500; }
+
+  /* SEARCH */
+  #search-wrap { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  #search {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  #search:focus { border-color: var(--accent2); }
+  #search::placeholder { color: var(--muted); }
+
+  /* FILTERS */
+  #filters {
+    padding: 10px 16px;
+    display: flex; gap: 6px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .filter-btn {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .filter-btn .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .filter-btn.active { border-color: currentColor; color: var(--text); background: rgba(255,255,255,.05); }
+  .filter-btn[data-size="Todas"].active { color: var(--accent); border-color: var(--accent); }
+  .filter-btn[data-size="Grande"].active { color: var(--grande); border-color: var(--grande); }
+  .filter-btn[data-size="Mediana"].active { color: var(--mediana); border-color: var(--mediana); }
+  .filter-btn[data-size="Pequeña"].active { color: var(--pequeña); border-color: var(--pequeña); }
+  .filter-btn[data-size="Micro"].active { color: var(--micro); border-color: var(--micro); }
+
+  /* LIST */
+  #list { flex: 1; overflow-y: auto; }
+  #list::-webkit-scrollbar { width: 4px; }
+  #list::-webkit-scrollbar-track { background: transparent; }
+  #list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .list-item {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background .12s;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .list-item:hover { background: rgba(255,255,255,.03); }
+  .list-item.active { background: rgba(232,255,71,.05); border-left: 2px solid var(--accent); }
+
+  .item-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    margin-top: 4px; flex-shrink: 0;
+  }
+
+  .item-info { flex: 1; min-width: 0; }
+  .item-name { font-size: 11px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-razon { font-size: 10px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .item-size {
+    font-size: 9px; padding: 2px 6px; border-radius: 3px;
+    flex-shrink: 0; align-self: flex-start; margin-top: 2px;
+    border: 1px solid currentColor; opacity: .8;
+  }
+
+  /* MAP */
+  #map { flex: 1; }
+
+  /* POPUP */
+  .leaflet-popup-content-wrapper {
+    background: var(--panel) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,.6) !important;
+    color: var(--text) !important;
+    font-family: 'DM Mono', monospace !important;
+    padding: 0 !important;
+  }
+  .leaflet-popup-content { margin: 0 !important; width: auto !important; }
+  .leaflet-popup-tip { background: var(--panel) !important; }
+  .leaflet-popup-close-button { color: var(--muted) !important; top: 8px !important; right: 10px !important; font-size: 16px !important; }
+
+  .popup-inner { padding: 16px 18px; min-width: 220px; max-width: 280px; }
+  .popup-size-tag {
+    display: inline-block; font-size: 9px; padding: 2px 7px;
+    border-radius: 3px; border: 1px solid currentColor;
+    margin-bottom: 8px; letter-spacing: .5px; text-transform: uppercase;
+  }
+  .popup-name { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; line-height: 1.2; color: var(--text); margin-bottom: 4px; }
+  .popup-row { font-size: 10px; color: var(--muted); margin-top: 4px; display: flex; gap: 6px; }
+  .popup-row strong { color: var(--text); min-width: 70px; }
+  .popup-waze {
+    display: block; margin-top: 12px; padding: 6px 10px;
+    background: rgba(232,255,71,.1); border: 1px solid var(--accent);
+    color: var(--accent); border-radius: 4px; font-size: 10px;
+    text-align: center; text-decoration: none; transition: background .15s;
+  }
+  .popup-waze:hover { background: rgba(232,255,71,.2); }
+
+  /* LEGEND */
+  #legend {
+    position: absolute; bottom: 24px; right: 24px; z-index: 900;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px 14px;
+    font-size: 10px; color: var(--muted);
+  }
+  #legend div { display: flex; align-items: center; gap: 7px; margin-top: 5px; }
+  #legend div:first-child { margin-top: 0; font-weight: 500; color: var(--text); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
+  #legend .ld { width: 10px; height: 10px; border-radius: 50%; }
+
+  .no-results { padding: 30px 16px; text-align: center; font-size: 11px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <h1>Mapa de Ubicaciones</h1>
+      <p>Ciudad Juárez, Chihuahua</p>
+      <div id="counter">Mostrando <span id="visible-count">104</span> de 104 ubicaciones</div>
+    </div>
+    <div id="search-wrap">
+      <input id="search" type="text" placeholder="Buscar por nombre o razón…"/>
+    </div>
+    <div id="filters">
+      <button class="filter-btn active" data-size="Todas"><span class="dot" style="background:var(--accent)"></span>Todas</button>
+      <button class="filter-btn" data-size="Grande"><span class="dot" style="background:var(--grande)"></span>Grande</button>
+      <button class="filter-btn" data-size="Mediana"><span class="dot" style="background:var(--mediana)"></span>Mediana</button>
+      <button class="filter-btn" data-size="Pequeña"><span class="dot" style="background:var(--pequeña)"></span>Pequeña</button>
+      <button class="filter-btn" data-size="Micro"><span class="dot" style="background:var(--micro)"></span>Micro</button>
+    </div>
+    <div id="list"></div>
+  </div>
+  <div id="map"></div>
+</div>
+<div id="legend">
+  <div>Tamaño</div>
+  <div><span class="ld" style="background:var(--grande)"></span>Grande</div>
+  <div><span class="ld" style="background:var(--mediana)"></span>Mediana</div>
+  <div><span class="ld" style="background:var(--pequeña)"></span>Pequeña</div>
+  <div><span class="ld" style="background:var(--micro)"></span>Micro</div>
+</div>
+
+<script>
+const LOCATIONS = [{"Nombre": "SARACHO JUAREZ", "Razón": "SARACHO JUAREZ", "Tamaño": "Mediana", "X": -106.4533853, "Y": 31.73714855, "Informante": "0430801510"}, {"Nombre": "HAGALO HOME CENTER OFICINAS", "Razón": "COMPAÑIA MADERERA DE CHIHUAHUA SUCESORES", "Tamaño": "Pequeña", "X": -106.43856378, "Y": 31.73805509, "Informante": "0430801540"}, {"Nombre": "HAGALO HOME CENTER PLAZA JUAREZ", "Razón": "COMPAÑIA MADERERA DE CHIHUAHUA SUCESORES", "Tamaño": "Mediana", "X": -106.42893079, "Y": 31.70742959, "Informante": "0430801540"}, {"Nombre": "SMART ALTAMIRANO", "Razón": "OPERADORA DE CIUDAD JUAREZ", "Tamaño": "Grande", "X": -106.49162371, "Y": 31.73793027, "Informante": "0430801588"}, {"Nombre": "SMART RIO GRANDE", "Razón": "OPERADORA DE CIUDAD JUAREZ", "Tamaño": "Grande", "X": -106.44612311, "Y": 31.73675583, "Informante": "0430801588"}, {"Nombre": "SMART 16 DE SEPTIEMBRE", "Razón": "OPERADORA DE CIUDAD JUAREZ", "Tamaño": "Grande", "X": -106.50839143, "Y": 31.74497057, "Informante": "0430801588"}, {"Nombre": "MEGA RADIO", "Razón": "NUEVA ERA RADIO DE CUIDAD JUAREZ", "Tamaño": "Mediana", "X": -106.44838308, "Y": 31.72619427, "Informante": "0800033674"}, {"Nombre": "HONEYWELL OPTOELECTRONICA", "Razón": "HONEYWELL OPTOELECTRONICA", "Tamaño": "Grande", "X": -106.4481836, "Y": 31.70284294, "Informante": "0831216328"}, {"Nombre": "SEPCE AGENCIA ADUANAL", "Razón": "SERVICIOS PROFESIONALES DE COMERCIO EXTERIOR", "Tamaño": "Mediana", "X": -106.4495008, "Y": 31.74328019, "Informante": "0851202072"}, {"Nombre": "TALLER DE CARROCERIA", "Razón": "AJEJANDRO SANCHEZ", "Tamaño": "Micro", "X": -106.44521774, "Y": 31.70505946, "Informante": ""}, {"Nombre": "LITTLE CAESAR", "Razón": "OPERACIONES LITTCE", "Tamaño": "Mediana", "X": -106.43439257, "Y": 31.71125791, "Informante": "0851225416"}, {"Nombre": "INDUSTRIAL RIO CONCHOS", "Razón": "INDUSTRIAL RIO CONCHOS", "Tamaño": "Mediana", "X": -106.44371163, "Y": 31.70035258, "Informante": "3110806990"}, {"Nombre": "ELECTRONICA BRK DE MEXICO", "Razón": "ELECTRONICA BRK DE MEXICO", "Tamaño": "Mediana", "X": -106.45351833, "Y": 31.70269125, "Informante": "3110823191"}, {"Nombre": "EXPRESS TRES FRONTERA", "Razón": "EXPRESS TRES FRONTERAS", "Tamaño": "Grande", "X": -106.45412261, "Y": 31.7060542, "Informante": "5110816061"}, {"Nombre": "PIASA FIRESTONE", "Razón": "PROVEEDORA INDUSTRIAL Y AUTOMOTRIZ", "Tamaño": "Pequeña", "X": -106.44906786, "Y": 31.73385841, "Informante": "Preguntar con 0800000264"}, {"Nombre": "OFICINAS ADMINISTRATIVAS", "Razón": "SALUD Y DESARROLLO COMUNITARIO DE CIUDAD JUAREZ", "Tamaño": "Pequeña", "X": -106.48261253, "Y": 31.74168834, "Informante": "Preguntar con 0851212229"}, {"Nombre": "E-MMSA", "Razón": "ANA RAMIREZ", "Tamaño": "Micro", "X": -106.45611282, "Y": 31.73320458, "Informante": ""}, {"Nombre": "EMPACADORA SUPERIOR", "Razón": "EMPACADORA SUPERIOR", "Tamaño": "Mediana", "X": -106.47423203, "Y": 31.71953805, "Informante": ""}, {"Nombre": "DENTISTA", "Razón": "ANGELICA ORTEGA", "Tamaño": "Micro", "X": -106.42866119, "Y": 31.70763683, "Informante": ""}, {"Nombre": "TALLER DE HERRERIA", "Razón": "ARTURO ORTIZ", "Tamaño": "Micro", "X": -106.49786855, "Y": 31.74344754, "Informante": ""}, {"Nombre": "NOVEDADES RODRIGUEZ", "Razón": "ARTURO RODRIGUEZ ARAUJO", "Tamaño": "Micro", "X": -106.4905497, "Y": 31.73841275, "Informante": ""}, {"Nombre": "ZUMBA TWINS", "Razón": "BARBARA ALEJANDRA GONZALEZ TORRES", "Tamaño": "Micro", "X": -106.50506266, "Y": 31.72938392, "Informante": ""}, {"Nombre": "BAR SANS SOUCI", "Razón": "CARLOS ROSALES FALCON", "Tamaño": "Pequeña", "X": -106.48825956, "Y": 31.74247415, "Informante": ""}, {"Nombre": "EL NUEVO VAQUERO", "Razón": "CARMEN ELVIRA MUNOZ", "Tamaño": "Micro", "X": -106.48633288, "Y": 31.7363681, "Informante": ""}, {"Nombre": "PANADERIA LA ROSA DE ORO", "Razón": "CARMEN GABRIELA SAENZ ZUBIA", "Tamaño": "Pequeña", "X": -106.44377562, "Y": 31.72123943, "Informante": ""}, {"Nombre": "ROPA USADA SIN NOMBRE", "Razón": "CECILIA ZAPIEN LOPEZ", "Tamaño": "Micro", "X": -106.4876665, "Y": 31.73399232, "Informante": ""}, {"Nombre": "TAQUERIA PALY", "Razón": "DANIEL CERECERES ROSALES", "Tamaño": "Pequeña", "X": -106.45864544, "Y": 31.73448199, "Informante": ""}, {"Nombre": "BARBERSHOP", "Razón": "EDGAR RAFAEL PICAZO MORALES", "Tamaño": "Micro", "X": -106.49743475, "Y": 31.73678182, "Informante": ""}, {"Nombre": "CHI SIX LICORES HERMANOS ESCOBAR", "Razón": "CONTROLADORA DE NEGOCIOS COMERCIALES", "Tamaño": "Micro", "X": -106.44031104, "Y": 31.7028864, "Informante": ""}, {"Nombre": "4105 WALDOS SUP VICENTE GUERRERO", "Razón": "WALDOS DOLAR MART DE MEXICO", "Tamaño": "Mediana", "X": -106.48403283, "Y": 31.73735884, "Informante": ""}, {"Nombre": "SUPER MERCADO GONZALEZ SUCURSAL MARISCAL", "Razón": "SUPERMERCADO GONZALEZ DE ALTAVISTA", "Tamaño": "Mediana", "X": -106.4879751, "Y": 31.73825563, "Informante": ""}, {"Nombre": "SUPER MERCADO GONZALEZ SUCURSAL CENTRO", "Razón": "SUPERMERCADO GONZALEZ DE ALTAVISTA", "Tamaño": "Mediana", "X": -106.48730498, "Y": 31.7443721, "Informante": ""}, {"Nombre": "SUPERMERCADO GONZALEZ LOPEZ MATEOS", "Razón": "SUPERMERCADO GONZALEZ DE ALTAVISTA", "Tamaño": "Mediana", "X": -106.45114882, "Y": 31.71164902, "Informante": ""}, {"Nombre": "6521 WALDOS AV LA RAZA", "Razón": "WALDOS DOLAR MART DE MEXICO", "Tamaño": "Pequeña", "X": -106.44221242, "Y": 31.72911842, "Informante": ""}, {"Nombre": "MOFLES RICHY", "Razón": "ELIO RICARDO CABADA CORRAL", "Tamaño": "Micro", "X": -106.4567792, "Y": 31.71837516, "Informante": ""}, {"Nombre": "POLLOS EL SABROSON", "Razón": "ELISEO SANTIAGO ROSADO", "Tamaño": "Micro", "X": -106.56663744, "Y": 31.78030867, "Informante": ""}, {"Nombre": "COPPEL TIENDA MINA 1494", "Razón": "COPPEL", "Tamaño": "Mediana", "X": -106.49022435, "Y": 31.7373888, "Informante": ""}, {"Nombre": "BOCA ROSA CENTRO", "Razón": "WAFURGA", "Tamaño": "Pequeña", "X": -106.48495871, "Y": 31.73791915, "Informante": ""}, {"Nombre": "FUERZA VERDE 3", "Razón": "ELVIRA SAENZ GARCIA", "Tamaño": "Micro", "X": -106.44684854, "Y": 31.73672191, "Informante": ""}, {"Nombre": "VENTA DE ROPA DE SEGUNDAS SIN NOMBRE", "Razón": "EUGENIA ENRIQUEZ GARCIA", "Tamaño": "Micro", "X": -106.4876665, "Y": 31.73399232, "Informante": ""}, {"Nombre": "COPPEL CANADA ZAPATERIA ALCAZAR 626", "Razón": "COPPEL", "Tamaño": "Pequeña", "X": -106.48561266, "Y": 31.73889915, "Informante": ""}, {"Nombre": "FARMACIA SIMILARES F2418", "Razón": "COMERCIALIZADORA ALPACEL", "Tamaño": "Pequeña", "X": -106.48653285, "Y": 31.7382987, "Informante": ""}, {"Nombre": "PUESTO", "Razón": "FERNANDO GOMEZ RIVERA", "Tamaño": "Micro", "X": -106.51966647, "Y": 31.76290536, "Informante": ""}, {"Nombre": "HERRERIA GUZMAN", "Razón": "FRACISCO GARCIA GUZMAN", "Tamaño": "Micro", "X": -106.5050381, "Y": 31.74412792, "Informante": ""}, {"Nombre": "OPTICASMGR", "Razón": "GASA030527MC7", "Tamaño": "Micro", "X": -106.48607566, "Y": 31.74482375, "Informante": ""}, {"Nombre": "OFFICE DEPOT DE MEXICO 528 PARTIDO IGLESIAS", "Razón": "OFFICE DEPOT DE MEXICO", "Tamaño": "Pequeña", "X": -106.45156848, "Y": 31.71281083, "Informante": ""}, {"Nombre": "BETOS TV", "Razón": "GILBERTO LIMAS JUAREZ", "Tamaño": "Micro", "X": -106.47920606, "Y": 31.72415963, "Informante": ""}, {"Nombre": "BURRITOS Y GORDITAS ELIZA Y LUPITA", "Razón": "HERMELINDA UNZUETA MEDRANO", "Tamaño": "Micro", "X": -106.4860706, "Y": 31.73827969, "Informante": ""}, {"Nombre": "BAR ESQUINA DEL CHIHUAS", "Razón": "JESUS RICARDO MOYA HATFIELD", "Tamaño": "Pequeña", "X": -106.48637265, "Y": 31.74548023, "Informante": ""}, {"Nombre": "AUTO DETALLADO JAPZ", "Razón": "JORGE PIZAÑA SUÑIGA", "Tamaño": "Micro", "X": -106.45518433, "Y": 31.74786435, "Informante": ""}, {"Nombre": "TALLER MECANICO SIN NOMBRE", "Razón": "JOSE ANTONIO ORTIZ VELAZQUEZ", "Tamaño": "Micro", "X": -106.50199786, "Y": 31.71297003, "Informante": ""}, {"Nombre": "THREE SOULS TNK MY MIND", "Razón": "JOSE PACHECO", "Tamaño": "Micro", "X": -106.42898077, "Y": 31.70744715, "Informante": ""}, {"Nombre": "RICASA LIMPIEZA", "Razón": "RICASA LIMPIEZA", "Tamaño": "Mediana", "X": -106.44640722, "Y": 31.70439811, "Informante": ""}, {"Nombre": "MOTO PARTES", "Razón": "JULIO CESAR GAUSIN RUIZ", "Tamaño": "Micro", "X": -106.44602438, "Y": 31.71114211, "Informante": ""}, {"Nombre": "VALOR MOTRIZ", "Razón": "VALOR MOTRIZ", "Tamaño": "Mediana", "X": -106.44001786, "Y": 31.7379001, "Informante": ""}, {"Nombre": "BOLSAS Y MOCHILAS", "Razón": "KAREN ELIZABETH REYES NAVARRO", "Tamaño": "Micro", "X": -106.4860706, "Y": 31.73827969, "Informante": ""}, {"Nombre": "COOPERATIVA LYMER", "Razón": "KARLA YASMIN MONTES GARCIA", "Tamaño": "Micro", "X": -106.56838596, "Y": 31.77224301, "Informante": ""}, {"Nombre": "ESTACION GALEANA", "Razón": "SUPER GAS DE CIUDAD JUAREZ", "Tamaño": "Micro", "X": -106.49767761, "Y": 31.71672956, "Informante": ""}, {"Nombre": "KUFFERATH", "Razón": "KUFFERATH MEXICO", "Tamaño": "Mediana", "X": -106.4292706, "Y": 31.7114088, "Informante": ""}, {"Nombre": "KB TEL TELECOMUNICACIONES", "Razón": "KB TELECOMUNICACIONES", "Tamaño": "Mediana", "X": -106.45223784, "Y": 31.73477003, "Informante": ""}, {"Nombre": "CONSUPAGO", "Razón": "CONSUPAGO", "Tamaño": "Pequeña", "X": -106.45125275, "Y": 31.71915001, "Informante": ""}, {"Nombre": "DOLAR2GO", "Razón": "DOLAR2GO", "Tamaño": "Micro", "X": -106.45584179, "Y": 31.75196638, "Informante": ""}, {"Nombre": "SALON DE EVENTOS SOCIALES MOROCOOS", "Razón": "GOBIERNO DEL ESTADO DE CHIHUAHUA", "Tamaño": "Pequeña", "X": -106.47088811, "Y": 31.72689948, "Informante": ""}, {"Nombre": "DA.CODEX BUFFET LEGAL INTEGRAL", "Razón": "SERVICIOS LEGALES", "Tamaño": "Micro", "X": -106.44488659, "Y": 31.71487923, "Informante": ""}, {"Nombre": "GRUPO TORMENZ", "Razón": "GRUPO TORMEZ", "Tamaño": "Pequeña", "X": -106.43091688, "Y": 31.70841015, "Informante": ""}, {"Nombre": "DESPACHO CONTABLE", "Razón": "VEGA DAVALOS ASOCIADOS SC", "Tamaño": "Micro", "X": -106.44451248, "Y": 31.71720724, "Informante": ""}, {"Nombre": "INFOLINK EXP", "Razón": "INFOLINK APLICACIONES", "Tamaño": "Grande", "X": -106.428617, "Y": 31.70762163, "Informante": ""}, {"Nombre": "VENDOR", "Razón": "VENDOR PUBLICIDAD EXTERIOR", "Tamaño": "Grande", "X": -106.47440259, "Y": 31.74119071, "Informante": ""}, {"Nombre": "SERVICIO PANAMERICANO DE PROTECCION", "Razón": "SERVICIO PANAMERICANO DE PROTECCION", "Tamaño": "Grande", "X": -106.44858838, "Y": 31.7464838, "Informante": ""}, {"Nombre": "VSH SEGURIDAD", "Razón": "VSH VIGILANCIA Y PROTECCION", "Tamaño": "Grande", "X": -106.44196564, "Y": 31.74134613, "Informante": ""}, {"Nombre": "INSTITUTO IBEROAMERICANO SAN PATRICIO", "Razón": "HERLAM", "Tamaño": "Grande", "X": -106.4315902, "Y": 31.71094528, "Informante": ""}, {"Nombre": "INSTITUTO KUROWI", "Razón": "ROSALVA QUESADA GALVEZ", "Tamaño": "Mediana", "X": -106.44633632, "Y": 31.73253024, "Informante": ""}, {"Nombre": "TALLER DE CLIMAS", "Razón": "LEON JAIME ALVAREZ CONTRERAS", "Tamaño": "Pequeña", "X": -106.45100731, "Y": 31.73459629, "Informante": ""}, {"Nombre": "UNIFORMES LETY", "Razón": "LETICIA RUEDA PACHECO", "Tamaño": "Micro", "X": -106.55816276, "Y": 31.77538485, "Informante": ""}, {"Nombre": "PUESTO DE LOTERIA", "Razón": "LORENZO SAUCEDO", "Tamaño": "Micro", "X": -106.5187201, "Y": 31.7607879, "Informante": "0851225408"}, {"Nombre": "ABARROTES INES", "Razón": "LOURDES ALICIA SALINAS HEREDIA", "Tamaño": "Micro", "X": -106.56771166, "Y": 31.78086868, "Informante": ""}, {"Nombre": "TALLERES IDM", "Razón": "LUCIA VELIA BARBA PEREZ", "Tamaño": "Micro", "X": -106.47211605, "Y": 31.732165, "Informante": ""}, {"Nombre": "CENTRO DE BIENESTAR INFANTIL EJERCITO DE SALVACION", "Razón": "CENTRO DE BIENESTAR INFANTIL EJERCITO DE SALVACION", "Tamaño": "Micro", "X": -106.48075281, "Y": 31.72709, "Informante": ""}, {"Nombre": "CIUDAD JUAREZ", "Razón": "PROMOCIONES E INVERSIONES DE GUERRERO", "Tamaño": "Mediana", "X": -106.44709795, "Y": 31.7367354, "Informante": ""}, {"Nombre": "CASINO CROWN JUAREZ", "Razón": "DELUNVIC ADMINISTRACION", "Tamaño": "Mediana", "X": -106.45525943, "Y": 31.75176491, "Informante": ""}, {"Nombre": "CLUB 15", "Razón": "LUIS FERNANDO URBINA VILLELA", "Tamaño": "Micro", "X": -106.484595, "Y": 31.73993406, "Informante": ""}, {"Nombre": "LOS ENCINOS HOTEL INN", "Razón": "LOS CEDROS DE CIUDAD JUÁREZ", "Tamaño": "Pequeña", "X": -106.44290308, "Y": 31.74013456, "Informante": ""}, {"Nombre": "MASTER CLEAN", "Razón": "LUIS GALLEGOS ANTUNEZ", "Tamaño": "Micro", "X": -106.50468211, "Y": 31.71330561, "Informante": ""}, {"Nombre": "POCKETS BILLARDS AND FUN", "Razón": "INICIATIVA DEL BRAVO", "Tamaño": "Mediana", "X": -106.4541118, "Y": 31.74170591, "Informante": ""}, {"Nombre": "MUEBLES CHELINO FABRICACION DE MUEBLES", "Razón": "MARCELINO VARGAS DE ROBLES", "Tamaño": "Micro", "X": -106.50166119, "Y": 31.7342157, "Informante": ""}, {"Nombre": "PUESTO", "Razón": "MARIA DE LA LUZ MENDEZ", "Tamaño": "Micro", "X": -106.51762993, "Y": 31.76860477, "Informante": ""}, {"Nombre": "TORTILLERIA RIO NASAS", "Razón": "MARIA ELVA RENTERIA SARIÑANA", "Tamaño": "Micro", "X": -106.48986391, "Y": 31.73854505, "Informante": ""}, {"Nombre": "DESPONCHADORA EL BARBAS", "Razón": "MARTIN FERMIN CARRILLO ANDRADE", "Tamaño": "Micro", "X": -106.45836978, "Y": 31.70981952, "Informante": ""}, {"Nombre": "GENERALES DE VILLA", "Razón": "HUGO SANDOVAL", "Tamaño": "Pequeña", "X": -106.45213017, "Y": 31.73406317, "Informante": ""}, {"Nombre": "FRUTERIA ESCAREÑO", "Razón": "MIGUEL ESCAREÑO", "Tamaño": "Micro", "X": -106.48983341, "Y": 31.73608136, "Informante": ""}, {"Nombre": "REFACCIONES Y SERVICIOS", "Razón": "PEDRO MARQUEZ CARRASCO", "Tamaño": "Pequeña", "X": -106.44553111, "Y": 31.71310851, "Informante": ""}, {"Nombre": "BARBER", "Razón": "RICARDO ARRIETA", "Tamaño": "Micro", "X": -106.53704187, "Y": 31.7393901, "Informante": ""}, {"Nombre": "BURGER KING HIPERMART", "Razón": "HM RESTAURANTES", "Tamaño": "Micro", "X": -106.44821213, "Y": 31.73680658, "Informante": ""}, {"Nombre": "CONSULTORIO DENTAL", "Razón": "ROCIO NOHEMI PEREZ GARDEA", "Tamaño": "Micro", "X": -106.45178847, "Y": 31.74865022, "Informante": ""}, {"Nombre": "CONSULTORIO DENTAL", "Razón": "ROMEO KANARE OLMOS URIAS", "Tamaño": "Micro", "X": -106.44096959, "Y": 31.71075382, "Informante": ""}, {"Nombre": "BURRITOS ALICIA", "Razón": "ROSA ALICIA HERRERA PICHARDO", "Tamaño": "Micro", "X": -106.52580294, "Y": 31.7265922, "Informante": ""}, {"Nombre": "NOVEDADES SIN NOMBRE", "Razón": "ROSA ISELA DOMINGUEZ", "Tamaño": "Micro", "X": -106.48980477, "Y": 31.73738858, "Informante": ""}, {"Nombre": "ABARROTES PAOLA", "Razón": "ROSA MARIA AMADOR", "Tamaño": "Micro", "X": -106.54016773, "Y": 31.73019455, "Informante": ""}, {"Nombre": "BAR LA MINA", "Razón": "SORAYA ANGELICA MORENO", "Tamaño": "Pequeña", "X": -106.47073468, "Y": 31.73834834, "Informante": ""}, {"Nombre": "VENTA DE SEGUNDAS", "Razón": "VERONICA ALDAMA GALVEZ", "Tamaño": "Micro", "X": -106.48797837, "Y": 31.73540639, "Informante": ""}, {"Nombre": "MUNDO OPTICO", "Razón": "YANERI GAYTAN MILLAN", "Tamaño": "Micro", "X": -106.43188296, "Y": 31.70874744, "Informante": ""}, {"Nombre": "DISEÑO FLORAL FLOVI", "Razón": "YESENIA UNZUETA MEDRANO", "Tamaño": "Micro", "X": -106.55942772, "Y": 31.77607883, "Informante": ""}, {"Nombre": "IGLESIA SAN JOSE", "Razón": "DIOSESIS DE JUAREZ", "Tamaño": "Micro", "X": -106.52121291, "Y": 31.73379814, "Informante": ""}, {"Nombre": "CASA PROMOCION JUVENIL", "Razón": "CENTRO DE ASESORIA Y PROMOCION JUVENIL", "Tamaño": "Pequeña", "X": -106.51066382, "Y": 31.71614994, "Informante": ""}];
+
+const COLORS = { Grande: '#e8ff47', Mediana: '#47aaff', 'Pequeña': '#ff7c47', Micro: '#c447ff' };
+const RADII  = { Grande: 9, Mediana: 7, 'Pequeña': 6, Micro: 5 };
+
+// Init map
+const map = L.map('map', { zoomControl: false }).setView([31.737, -106.47], 13);
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap © CARTO',
+  maxZoom: 19
+}).addTo(map);
+
+// Create markers
+const markers = LOCATIONS.map((loc, i) => {
+  const color = COLORS[loc.Tamaño] || '#aaa';
+  const r = RADII[loc.Tamaño] || 6;
+
+  const marker = L.circleMarker([loc.Y, loc.X], {
+    radius: r,
+    fillColor: color,
+    color: '#0d0f14',
+    weight: 1.5,
+    fillOpacity: 0.88,
+    opacity: 1
+  });
+
+  const wazeUrl = `https://waze.com/ul?ll=${loc.Y},${loc.X}&navigate=yes`;
+  marker.bindPopup(`
+    <div class="popup-inner">
+      <span class="popup-size-tag" style="color:${color};border-color:${color}">${loc.Tamaño}</span>
+      <div class="popup-name">${loc.Nombre}</div>
+      <div class="popup-row"><strong>Razón:</strong>${loc.Razón}</div>
+      ${loc.Informante ? `<div class="popup-row"><strong>Informante:</strong>${loc.Informante}</div>` : ''}
+      <div class="popup-row"><strong>Coords:</strong>${loc.Y.toFixed(5)}, ${loc.X.toFixed(5)}</div>
+      <a class="popup-waze" href="${wazeUrl}" target="_blank">↗ Abrir en Waze</a>
+    </div>
+  `, { maxWidth: 300 });
+
+  marker.on('click', () => selectItem(i));
+  marker.addTo(map);
+  return { marker, data: loc, index: i, visible: true };
+});
+
+// List rendering
+let activeFilter = 'Todas';
+let searchTerm = '';
+let activeIndex = -1;
+
+function sizeColor(s) { return COLORS[s] || '#aaa'; }
+
+function renderList(items) {
+  const list = document.getElementById('list');
+  const visible = items.filter(m => m.visible);
+  document.getElementById('visible-count').textContent = visible.length;
+
+  if (visible.length === 0) {
+    list.innerHTML = '<div class="no-results">Sin resultados</div>';
+    return;
+  }
+
+  list.innerHTML = visible.map(m => {
+    const c = sizeColor(m.data.Tamaño);
+    return `<div class="list-item ${m.index === activeIndex ? 'active' : ''}" data-index="${m.index}">
+      <span class="item-dot" style="background:${c}"></span>
+      <div class="item-info">
+        <div class="item-name">${m.data.Nombre}</div>
+        <div class="item-razon">${m.data.Razón}</div>
+      </div>
+      <span class="item-size" style="color:${c};border-color:${c}">${m.data.Tamaño}</span>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.list-item').forEach(el => {
+    el.addEventListener('click', () => selectItem(+el.dataset.index));
+  });
+}
+
+function selectItem(idx) {
+  activeIndex = idx;
+  const m = markers[idx];
+  map.setView([m.data.Y, m.data.X], 16, { animate: true });
+  m.marker.openPopup();
+  applyFilters();
+
+  // Scroll list item into view
+  const el = document.querySelector(`.list-item[data-index="${idx}"]`);
+  if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function applyFilters() {
+  const term = searchTerm.toLowerCase();
+  markers.forEach(m => {
+    const matchSize = activeFilter === 'Todas' || m.data.Tamaño === activeFilter;
+    const matchSearch = !term || m.data.Nombre.toLowerCase().includes(term) || m.data.Razón.toLowerCase().includes(term);
+    m.visible = matchSize && matchSearch;
+    if (m.visible) {
+      m.marker.addTo(map);
+    } else {
+      m.marker.remove();
+    }
+  });
+  renderList(markers);
+}
+
+// Filter buttons
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.size;
+    applyFilters();
+  });
+});
+
+// Search
+document.getElementById('search').addEventListener('input', e => {
+  searchTerm = e.target.value;
+  applyFilters();
+});
+
+// Initial render
+renderList(markers);
+</script>
+</body>
+</html>
