@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Mapa de Ubicaciones — Ciudad Juárez</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f0f2f5;
+    --panel: #ffffff;
+    --border: #dde1ea;
+    --accent: #1a6ef5;
+    --accent2: #0ea87a;
+    --text: #1a1d26;
+    --muted: #8a90a0;
+    --grande: #d62828;
+    --mediana: #1a6ef5;
+    --pequeña: #f4820a;
+    --micro: #7b2ff7;
+  }
+
+  html, body { height: 100%; font-family: 'DM Mono', monospace; background: var(--bg); color: var(--text); overflow: hidden; }
+
+  #app { display: flex; height: 100vh; }
+
+  /* SIDEBAR */
+  #sidebar {
+    width: 320px;
+    min-width: 320px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    overflow: hidden;
+    transition: transform .28s cubic-bezier(.4,0,.2,1), width .28s cubic-bezier(.4,0,.2,1), min-width .28s cubic-bezier(.4,0,.2,1);
+  }
+
+  #sidebar.collapsed {
+    transform: translateX(-320px);
+    min-width: 0;
+    width: 0;
+  }
+
+  #toggle-btn.collapsed {
+    left: 14px;
+  }
+
+  #sidebar-header {
+    padding: 22px 20px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  #sidebar-header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+  }
+
+  #sidebar-header p {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  #counter {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+  #counter span { color: var(--accent); font-weight: 500; }
+
+  /* SEARCH */
+  #search-wrap { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  #search {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  #search:focus { border-color: var(--accent2); }
+  #search::placeholder { color: var(--muted); }
+
+  /* FILTERS */
+  #filters {
+    padding: 10px 16px;
+    display: flex; gap: 6px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .filter-btn {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .filter-btn .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .filter-btn.active { border-color: currentColor; color: var(--text); background: rgba(0,0,0,.05); }
+  .filter-btn[data-size="Todas"].active { color: var(--accent); border-color: var(--accent); }
+  .filter-btn[data-size="Grande"].active { color: #d62828; border-color: #d62828; }
+  .filter-btn[data-size="Mediana"].active { color: #1a6ef5; border-color: #1a6ef5; }
+  .filter-btn[data-size="Pequeña"].active { color: #f4820a; border-color: #f4820a; }
+  .filter-btn[data-size="Micro"].active { color: #7b2ff7; border-color: #7b2ff7; }
+
+  /* LIST */
+  #list { flex: 1; overflow-y: auto; }
+  #list::-webkit-scrollbar { width: 4px; }
+  #list::-webkit-scrollbar-track { background: transparent; }
+  #list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .list-item {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background .12s;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .list-item:hover { background: rgba(0,0,0,.03); }
+  .list-item.active { background: rgba(26,110,245,.06); border-left: 2px solid var(--accent); }
+
+  .item-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    margin-top: 4px; flex-shrink: 0;
+  }
+
+  .item-info { flex: 1; min-width: 0; }
+  .item-name { font-size: 11px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-razon { font-size: 10px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .item-size {
+    font-size: 9px; padding: 2px 6px; border-radius: 3px;
+    flex-shrink: 0; align-self: flex-start; margin-top: 2px;
+    border: 1px solid currentColor; opacity: .8;
+  }
+
+  /* MAP */
+  #map { flex: 1; }
+
+  /* POPUP */
+  .leaflet-popup-content-wrapper {
+    background: var(--panel) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,.15) !important;
+    color: var(--text) !important;
+    font-family: 'DM Mono', monospace !important;
+    padding: 0 !important;
+  }
+  .leaflet-popup-content { margin: 0 !important; width: auto !important; }
+  .leaflet-popup-tip { background: var(--panel) !important; }
+  .leaflet-popup-close-button { color: var(--muted) !important; top: 8px !important; right: 10px !important; font-size: 16px !important; }
+
+  .popup-inner { padding: 16px 18px; min-width: 220px; max-width: 280px; }
+  .popup-size-tag {
+    display: inline-block; font-size: 9px; padding: 2px 7px;
+    border-radius: 3px; border: 1px solid currentColor;
+    margin-bottom: 8px; letter-spacing: .5px; text-transform: uppercase;
+  }
+  .popup-name { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; line-height: 1.2; color: var(--text); margin-bottom: 4px; }
+  .popup-row { font-size: 10px; color: var(--muted); margin-top: 4px; display: flex; gap: 6px; }
+  .popup-row strong { color: var(--text); min-width: 70px; }
+  .popup-waze {
+    display: block; margin-top: 12px; padding: 6px 10px;
+    background: rgba(26,110,245,.08); border: 1px solid var(--accent);
+    color: var(--accent); border-radius: 4px; font-size: 10px;
+    text-align: center; text-decoration: none; transition: background .15s;
+  }
+  .popup-waze:hover { background: rgba(26,110,245,.18); }
+
+  /* LEGEND */
+  #legend {
+    position: absolute; bottom: 24px; right: 24px; z-index: 900;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px 14px;
+    font-size: 10px; color: var(--muted);
+  }
+  #legend div { display: flex; align-items: center; gap: 7px; margin-top: 5px; }
+  #legend div:first-child { margin-top: 0; font-weight: 500; color: var(--text); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
+  #legend .ld { width: 10px; height: 10px; border-radius: 50%; }
+
+  .no-results { padding: 30px 16px; text-align: center; font-size: 11px; color: var(--muted); }
+
+  /* GEOLOCATION BUTTON */
+  #locate-btn {
+    position: absolute;
+    bottom: 90px;
+    left: 14px;
+    z-index: 900;
+    width: 42px;
+    height: 42px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    transition: background .15s;
+  }
+  #locate-btn:hover { background: var(--border); }
+  #locate-btn.active { border-color: #0ea87a; background: rgba(14,168,122,.1); }
+
+  /* PULSING USER LOCATION DOT */
+  .user-location-dot {
+    width: 16px; height: 16px;
+    background: #0ea87a;
+    border: 3px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 0 0 rgba(14,168,122,.6);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(14,168,122,.6); }
+    70%  { box-shadow: 0 0 0 12px rgba(14,168,122,0); }
+    100% { box-shadow: 0 0 0 0 rgba(14,168,122,0); }
+  }
+
+  /* MOBILE TOGGLE BUTTON */
+  #toggle-btn {
+    display: flex;
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 2000;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-family: 'DM Mono', monospace;
+    font-size: 18px;
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    transition: background .15s;
+  }
+  #toggle-btn:active { background: var(--border); }
+
+  /* OVERLAY */
+  #overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    z-index: 1500;
+  }
+
+  @media (max-width: 700px) {
+    #sidebar {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: 88vw;
+      max-width: 340px;
+      transform: translateX(-110%);
+      transition: transform .28s cubic-bezier(.4,0,.2,1);
+      z-index: 1600;
+      box-shadow: 4px 0 32px rgba(0,0,0,.2);
+    }
+
+    #sidebar.open {
+      transform: translateX(0);
+    }
+
+    #sidebar.collapsed {
+      transform: translateX(-110%);
+      width: 88vw;
+      min-width: unset;
+    }
+
+    #overlay.open { display: block; }
+
+    #map { width: 100%; }
+
+    #legend { bottom: 16px; right: 12px; }
+  }
+</style>
+</head>
+<body>
+<button id="toggle-btn" onclick="toggleSidebar()" aria-label="Abrir menú">☰</button>
+<div id="overlay" onclick="toggleSidebar()"></div>
+<div id="app">
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <h1>Mapa de Ubicaciones</h1>
+      <p>Ciudad Juárez, Chihuahua</p>
+      <div id="counter">Mostrando <span id="visible-count">51</span> de 51 ubicaciones</div>
+    </div>
+    <div id="search-wrap">
+      <input id="search" type="text" placeholder="Buscar por nombre o razón…"/>
+    </div>
+    <div id="filters">
+      <button class="filter-btn active" data-size="Todas"><span class="dot" style="background:var(--accent)"></span>Todas</button>
+      <button class="filter-btn" data-size="Grande"><span class="dot" style="background:#d62828"></span>Grande</button>
+      <button class="filter-btn" data-size="Mediana"><span class="dot" style="background:#1a6ef5"></span>Mediana</button>
+      <button class="filter-btn" data-size="Pequeña"><span class="dot" style="background:#f4820a"></span>Pequeña</button>
+      <button class="filter-btn" data-size="Micro"><span class="dot" style="background:#7b2ff7"></span>Micro</button>
+    </div>
+    <div id="list"></div>
+  </div>
+  <div id="map"></div>
+  <button id="locate-btn" title="Mi ubicación">📍</button>
+</div>
+<div id="legend">
+  <div>Tamaño</div>
+  <div><span class="ld" style="background:#d62828"></span>Grande</div>
+  <div><span class="ld" style="background:#1a6ef5"></span>Mediana</div>
+  <div><span class="ld" style="background:#f4820a"></span>Pequeña</div>
+  <div><span class="ld" style="background:#7b2ff7"></span>Micro</div>
+</div>
+
+<script>
+const LOCATIONS = [{"Nombre": "SARACHO JUAREZ", "Razón": "SARACHO JUAREZ", "Tamaño": "Mediana", "X": -106.4533853, "Y": 31.73714855, "Informante": "0430801510", "Domicilio": "PASEO TRIUNFO DE LA REPÚBLICA 2600"}, {"Nombre": "HAGALO HOME CENTER OFICINAS", "Razón": "COMPAÑIA MADERERA DE CHIHUAHUA SUCESORES", "Tamaño": "Pequeña", "X": -106.43856378, "Y": 31.73805509, "Informante": "0430801540", "Domicilio": "PASEO TRIUNFO DE LA REPÚBLICA 5355"}, {"Nombre": "SMART ALTAMIRANO", "Razón": "OPERADORA DE CIUDAD JUAREZ", "Tamaño": "Grande", "X": -106.49162371, "Y": 31.73793027, "Informante": "0430801588", "Domicilio": "FRANCISCO JAVIER MINA 1150"}, {"Nombre": "SMART RIO GRANDE", "Razón": "OPERADORA DE CIUDAD JUAREZ", "Tamaño": "Grande", "X": -106.44612311, "Y": 31.73675583, "Informante": "0430801588", "Domicilio": "PASEO TRIUNFO DE LA REPÚBLICA (ADOLFO LOPEZ MATEOS) 4450, RIO GRANDE"}, {"Nombre": "SMART 16 DE SEPTIEMBRE", "Razón": "OPERADORA DE CIUDAD JUAREZ", "Tamaño": "Grande", "X": -106.50839143, "Y": 31.74497057, "Informante": "0430801588", "Domicilio": "16 DE SEPTIEMBRE 5198"}, {"Nombre": "MEGA RADIO", "Razón": "NUEVA ERA RADIO DE CUIDAD JUAREZ", "Tamaño": "Mediana", "X": -106.44838308, "Y": 31.72619427, "Informante": "0800033674", "Domicilio": "DEL EJIDO 316"}, {"Nombre": "LITTLE CAESAR", "Razón": "OPERACIONES LITTCE", "Tamaño": "Mediana", "X": -106.43439257, "Y": 31.71125791, "Informante": "0851225416", "Domicilio": "VALENTIN FUENTES 2104-32370-15"}, {"Nombre": "INDUSTRIAL RIO CONCHOS", "Razón": "INDUSTRIAL RIO CONCHOS", "Tamaño": "Mediana", "X": -106.44371163, "Y": 31.70035258, "Informante": "3110806990", "Domicilio": "OSCAR FLORES SANCHEZ 3122"}, {"Nombre": "PIASA FIRESTONE", "Razón": "PROVEEDORA INDUSTRIAL Y AUTOMOTRIZ", "Tamaño": "Pequeña", "X": -106.44906786, "Y": 31.73385841, "Informante": "Preguntar con 0800000264", "Domicilio": "VICENTE GUERRERO 4134"}, {"Nombre": "OFICINAS ADMINISTRATIVAS", "Razón": "SALUD Y DESARROLLO COMUNITARIO DE CIUDAD JUAREZ", "Tamaño": "Pequeña", "X": -106.48261253, "Y": 31.74168834, "Informante": "Preguntar con 0851212229", "Domicilio": "INTERNACIONAL 716"}, {"Nombre": "E-MMSA", "Razón": "ANA RAMIREZ", "Tamaño": "Micro", "X": -106.45611282, "Y": 31.73320458, "Informante": "", "Domicilio": "FERNANDO MONTES DE OCA 3205"}, {"Nombre": "EMPACADORA SUPERIOR", "Razón": "EMPACADORA SUPERIOR", "Tamaño": "Mediana", "X": -106.47423203, "Y": 31.71953805, "Informante": "", "Domicilio": "BETA 2898"}, {"Nombre": "DENTISTA", "Razón": "ANGELICA ORTEGA", "Tamaño": "Micro", "X": -106.42866119, "Y": 31.70763683, "Informante": "", "Domicilio": "EJERCITO NACIONAL 6325"}, {"Nombre": "NOVEDADES RODRIGUEZ", "Razón": "ARTURO RODRIGUEZ ARAUJO", "Tamaño": "Micro", "X": -106.4905497, "Y": 31.73841275, "Informante": "", "Domicilio": "JOSE MARIA MORELOS 943"}, {"Nombre": "ZUMBA TWINS", "Razón": "BARBARA ALEJANDRA GONZALEZ TORRES", "Tamaño": "Micro", "X": -106.50506266, "Y": 31.72938392, "Informante": "", "Domicilio": "GENERAL LUCIO BLANCO 3072"}, {"Nombre": "BAR SANS SOUCI", "Razón": "CARLOS ROSALES FALCON", "Tamaño": "Pequeña", "X": -106.48825956, "Y": 31.74247415, "Informante": "", "Domicilio": "MELCHOR OCAMPO 597"}, {"Nombre": "EL NUEVO VAQUERO", "Razón": "CARMEN ELVIRA MUNOZ", "Tamaño": "Micro", "X": -106.48633288, "Y": 31.7363681, "Informante": "", "Domicilio": "FRANCISCO JAVIER MINA 422"}, {"Nombre": "ROPA USADA SIN NOMBRE", "Razón": "CECILIA ZAPIEN LOPEZ", "Tamaño": "Micro", "X": -106.488417, "Y": 31.734217, "Informante": "", "Domicilio": "JOAQUIN TERRAZAS 455, MERCADO OSCAR FLORES"}, {"Nombre": "CHI SIX LICORES HERMANOS ESCOBAR", "Razón": "CONTROLADORA DE NEGOCIOS COMERCIALES", "Tamaño": "Micro", "X": -106.44031104, "Y": 31.7028864, "Informante": "", "Domicilio": "BALBUENA 5705"}, {"Nombre": "SUPER MERCADO GONZALEZ SUCURSAL MARISCAL", "Razón": "SUPERMERCADO GONZALEZ DE ALTAVISTA", "Tamaño": "Mediana", "X": -106.4879751, "Y": 31.73825563, "Informante": "", "Domicilio": "IGNACIO MARISCAL 205"}, {"Nombre": "SUPER MERCADO GONZALEZ SUCURSAL CENTRO", "Razón": "SUPERMERCADO GONZALEZ DE ALTAVISTA", "Tamaño": "Mediana", "X": -106.48730498, "Y": 31.7443721, "Informante": "", "Domicilio": "MELCHOR OCAMPO 868"}, {"Nombre": "SUPERMERCADO GONZALEZ LOPEZ MATEOS", "Razón": "SUPERMERCADO GONZALEZ DE ALTAVISTA", "Tamaño": "Mediana", "X": -106.45114882, "Y": 31.71164902, "Informante": "", "Domicilio": "OSCAR FLORES 2250"}, {"Nombre": "MOFLES RICHY", "Razón": "ELIO RICARDO CABADA CORRAL", "Tamaño": "Micro", "X": -106.4567792, "Y": 31.71837516, "Informante": "", "Domicilio": "MUNICIPIO LIBRE 3153"}, {"Nombre": "OPTICASMGR", "Razón": "GASA030527MC7", "Tamaño": "Micro", "X": -106.48607566, "Y": 31.74482375, "Informante": "", "Domicilio": "BENITO JUAREZ 783"}, {"Nombre": "BETOS TV", "Razón": "GILBERTO LIMAS JUAREZ", "Tamaño": "Micro", "X": -106.47920606, "Y": 31.72415963, "Informante": "", "Domicilio": "LIBERTAD 2073"}, {"Nombre": "BURRITOS Y GORDITAS ELIZA Y LUPITA", "Razón": "HERMELINDA UNZUETA MEDRANO", "Tamaño": "Micro", "X": -106.4860706, "Y": 31.73827969, "Informante": "", "Domicilio": "VICENTE GUERRERO 308, MERCADO REFORMA"}, {"Nombre": "BAR ESQUINA DEL CHIHUAS", "Razón": "JESUS RICARDO MOYA HATFIELD", "Tamaño": "Pequeña", "X": -106.48637265, "Y": 31.74548023, "Informante": "", "Domicilio": "BENITO JUAREZ 832-A"}, {"Nombre": "RICASA LIMPIEZA", "Razón": "RICASA LIMPIEZA", "Tamaño": "Mediana", "X": -106.44640722, "Y": 31.70439811, "Informante": "", "Domicilio": "OSCAR FLORES SANCHEZ 2815"}, {"Nombre": "BOLSAS Y MOCHILAS", "Razón": "KAREN ELIZABETH REYES NAVARRO", "Tamaño": "Micro", "X": -106.4860706, "Y": 31.73827969, "Informante": "", "Domicilio": "VICENTE GUERRERO 308, MERCADO REFORMA"}, {"Nombre": "KUFFERATH", "Razón": "KUFFERATH MEXICO", "Tamaño": "Mediana", "X": -106.4292706, "Y": 31.7114088, "Informante": "", "Domicilio": "AGUIRRE LAREDO 6605"}, {"Nombre": "CONSUPAGO", "Razón": "CONSUPAGO", "Tamaño": "Pequeña", "X": -106.45125275, "Y": 31.71915001, "Informante": "", "Domicilio": "LÓPEZ MATEOS 1615"}, {"Nombre": "DOLAR2GO", "Razón": "DOLAR2GO", "Tamaño": "Micro", "X": -106.45584179, "Y": 31.75196638, "Informante": "", "Domicilio": "DAVID HERRERA JORDAN 0-SN"}, {"Nombre": "SALON DE EVENTOS SOCIALES MOROCOOS", "Razón": "GOBIERNO DEL ESTADO DE CHIHUAHUA", "Tamaño": "Pequeña", "X": -106.47088811, "Y": 31.72689948, "Informante": "", "Domicilio": "REFORMA"}, {"Nombre": "DA.CODEX BUFFET LEGAL INTEGRAL", "Razón": "SERVICIOS LEGALES", "Tamaño": "Micro", "X": -106.44488659, "Y": 31.71487923, "Informante": "", "Domicilio": "LAURELES 1972"}, {"Nombre": "GRUPO TORMENZ", "Razón": "GRUPO TORMEZ", "Tamaño": "Pequeña", "X": -106.43091688, "Y": 31.70841015, "Informante": "", "Domicilio": "EJERCITO NACIONAL 6225, PLAZA SAN JOSE"}, {"Nombre": "INFOLINK EXP", "Razón": "INFOLINK APLICACIONES", "Tamaño": "Grande", "X": -106.428617, "Y": 31.70762163, "Informante": "", "Domicilio": "EJÉRCITO NACIONAL 7695, PLAZA DEL CAMINO"}, {"Nombre": "VENDOR", "Razón": "VENDOR PUBLICIDAD EXTERIOR", "Tamaño": "Grande", "X": -106.47440259, "Y": 31.74119071, "Informante": "", "Domicilio": "IGNACIO MEJÍA 963"}, {"Nombre": "SERVICIO PANAMERICANO DE PROTECCION", "Razón": "SERVICIO PANAMERICANO DE PROTECCION", "Tamaño": "Grande", "X": -106.44858838, "Y": 31.7464838, "Informante": "", "Domicilio": "ADOLFO LÓPEZ MATEOS 1088"}, {"Nombre": "INSTITUTO IBEROAMERICANO SAN PATRICIO", "Razón": "HERLAM", "Tamaño": "Grande", "X": -106.4315902, "Y": 31.71094528, "Informante": "", "Domicilio": "ALEJANDRO AGUIRRE LAREDO 6142"}, {"Nombre": "INSTITUTO KUROWI", "Razón": "ROSALVA QUESADA GALVEZ", "Tamaño": "Mediana", "X": -106.44633632, "Y": 31.73253024, "Informante": "", "Domicilio": "M LE BLANC 4393"}, {"Nombre": "TALLERES IDM", "Razón": "LUCIA VELIA BARBA PEREZ", "Tamaño": "Micro", "X": -106.47211605, "Y": 31.732165, "Informante": "", "Domicilio": "18 DE MARZO 1415"}, {"Nombre": "CIUDAD JUAREZ", "Razón": "PROMOCIONES E INVERSIONES DE GUERRERO", "Tamaño": "Mediana", "X": -106.44709795, "Y": 31.7367354, "Informante": "", "Domicilio": "PASEO TRIUNFO DE LA REPÚBLICA 4450, RIO GRANDE"}, {"Nombre": "CLUB 15", "Razón": "LUIS FERNANDO URBINA VILLELA", "Tamaño": "Micro", "X": -106.484595, "Y": 31.73993406, "Informante": "", "Domicilio": "BENITO JUAREZ 136"}, {"Nombre": "BARBER", "Razón": "RICARDO ARRIETA", "Tamaño": "Micro", "X": -106.53704187, "Y": 31.7393901, "Informante": "", "Domicilio": "NINGUNO 2044"}, {"Nombre": "CONSULTORIO DENTAL", "Razón": "ROCIO NOHEMI PEREZ GARDEA", "Tamaño": "Micro", "X": -106.45178847, "Y": 31.74865022, "Informante": "", "Domicilio": "ZEMPOALA 3420"}, {"Nombre": "CONSULTORIO DENTAL", "Razón": "ROMEO KANARE OLMOS URIAS", "Tamaño": "Micro", "X": -106.44096959, "Y": 31.71075382, "Informante": "", "Domicilio": "CAMINO VIEJO A SAN JOSE 5521"}, {"Nombre": "BAR LA MINA", "Razón": "SORAYA ANGELICA MORENO", "Tamaño": "Pequeña", "X": -106.47073468, "Y": 31.73834834, "Informante": "", "Domicilio": "16 DE SEPTIEMBRE 1530"}, {"Nombre": "DISEÑO FLORAL FLOVI", "Razón": "YESENIA UNZUETA MEDRANO", "Tamaño": "Micro", "X": -106.55942772, "Y": 31.77607883, "Informante": "", "Domicilio": "RANCHO ANAPRA 10734-B"}, {"Nombre": "SAFRAN PLANTA 4 SEAT SHELLS", "Razón": "SAFRAN AEROSYSTEMS MEXICO", "Tamaño": "Grande", "X": -106.44923777, "Y": 31.73386867, "Informante": "", "Domicilio": "VICENTE GUERRERO 18702, PARQUE INDUSTRIAL SUPRA"}, {"Nombre": "SOLUCIONES INDUSTRIALES DE DISEÑO", "Razón": "JUAN CARLOS ORTIZ MEJIA", "Tamaño": "Mediana", "X": -106.45401692, "Y": 31.71700576, "Informante": "", "Domicilio": "MUNICIPIO LIBRE 3529"}, {"Nombre": "KALISCH ACERO OSCAR FLORES", "Razón": "KALISCH FIERRO Y ACERO", "Tamaño": "Mediana", "X": -106.44898226, "Y": 31.70935365, "Informante": "", "Domicilio": "OSCAR FLORES Y BENEMERITO DE LAS AMERICAS 1136"}];
+
+const COLORS = { Grande: '#d62828', Mediana: '#1a6ef5', 'Pequeña': '#f4820a', Micro: '#7b2ff7' };
+const RADII  = { Grande: 9, Mediana: 7, 'Pequeña': 6, Micro: 5 };
+
+// Init map
+const map = L.map('map', { zoomControl: false }).setView([31.737, -106.47], 13);
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+  attribution: '© <a href="https://www.esri.com/">Esri</a>',
+  maxZoom: 20
+}).addTo(map);
+
+// Geolocation
+let userMarker = null;
+let watchId = null;
+
+document.getElementById('locate-btn').addEventListener('click', () => {
+  const btn = document.getElementById('locate-btn');
+
+  if (!navigator.geolocation) {
+    alert('Tu navegador no soporta geolocalización.');
+    return;
+  }
+
+  if (watchId !== null) {
+    // Turn off
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    if (userMarker) { userMarker.remove(); userMarker = null; }
+    btn.classList.remove('active');
+    btn.title = 'Mi ubicación';
+    btn.textContent = '📍';
+    return;
+  }
+
+  btn.textContent = '⏳';
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      btn.textContent = '📍';
+      btn.classList.add('active');
+      btn.title = 'Desactivar mi ubicación';
+
+      const dotEl = document.createElement('div');
+      dotEl.className = 'user-location-dot';
+      const dotIcon = L.divIcon({ html: dotEl.outerHTML, className: '', iconSize: [16, 16], iconAnchor: [8, 8] });
+
+      if (!userMarker) {
+        userMarker = L.marker([lat, lng], { icon: dotIcon, zIndexOffset: 1000 })
+          .bindPopup(`<div class="popup-inner"><div class="popup-name">Mi ubicación</div><div class="popup-row"><strong>Precisión:</strong>±${Math.round(accuracy)}m</div></div>`)
+          .addTo(map);
+        map.setView([lat, lng], 16, { animate: true });
+      } else {
+        userMarker.setLatLng([lat, lng]);
+        userMarker.setIcon(dotIcon);
+      }
+    },
+    (err) => {
+      btn.textContent = '📍';
+      watchId = null;
+      if (err.code === 1) alert('Permiso de ubicación denegado. Por favor actívalo en la configuración de tu navegador.');
+      else alert('No se pudo obtener tu ubicación. Intenta de nuevo.');
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+  );
+});
+
+// Create markers
+const markers = LOCATIONS.map((loc, i) => {
+  const color = COLORS[loc.Tamaño] || '#aaa';
+  const r = RADII[loc.Tamaño] || 6;
+
+  const marker = L.circleMarker([loc.Y, loc.X], {
+    radius: r,
+    fillColor: color,
+    color: '#ffffff',
+    weight: 1.5,
+    fillOpacity: 0.88,
+    opacity: 1
+  });
+
+  const wazeUrl = `https://waze.com/ul?ll=${loc.Y},${loc.X}&navigate=yes`;
+  marker.bindPopup(`
+    <div class="popup-inner">
+      <span class="popup-size-tag" style="color:${color};border-color:${color}">${loc.Tamaño}</span>
+      <div class="popup-name">${loc.Nombre}</div>
+      <div class="popup-row"><strong>Razón:</strong>${loc.Razón}</div>
+      <div class="popup-row"><strong>Domicilio:</strong>${loc.Domicilio || '—'}</div>
+      <div class="popup-row"><strong>Informante:</strong>${loc.Informante || '—'}</div>
+      <a class="popup-waze" href="${wazeUrl}" target="_blank">↗ Abrir en Waze</a>
+    </div>
+  `, { maxWidth: 300 });
+
+  marker.on('click', () => selectItem(i));
+  marker.addTo(map);
+  return { marker, data: loc, index: i, visible: true };
+});
+
+// List rendering
+let activeFilter = 'Todas';
+let searchTerm = '';
+let activeIndex = -1;
+
+function sizeColor(s) { return COLORS[s] || '#aaa'; }
+
+function renderList(items) {
+  const list = document.getElementById('list');
+  const visible = items.filter(m => m.visible);
+  document.getElementById('visible-count').textContent = visible.length;
+
+  if (visible.length === 0) {
+    list.innerHTML = '<div class="no-results">Sin resultados</div>';
+    return;
+  }
+
+  list.innerHTML = visible.map(m => {
+    const c = sizeColor(m.data.Tamaño);
+    return `<div class="list-item ${m.index === activeIndex ? 'active' : ''}" data-index="${m.index}">
+      <span class="item-dot" style="background:${c}"></span>
+      <div class="item-info">
+        <div class="item-name">${m.data.Nombre}</div>
+        <div class="item-razon">${m.data.Razón}</div>
+      </div>
+      <span class="item-size" style="color:${c};border-color:${c}">${m.data.Tamaño}</span>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.list-item').forEach(el => {
+    el.addEventListener('click', () => selectItem(+el.dataset.index));
+  });
+}
+
+function selectItem(idx) {
+  activeIndex = idx;
+  const m = markers[idx];
+  map.setView([m.data.Y, m.data.X], 16, { animate: true });
+  m.marker.openPopup();
+  applyFilters();
+  closeSidebarOnMobile();
+
+  // Scroll list item into view
+  const el = document.querySelector(`.list-item[data-index="${idx}"]`);
+  if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function applyFilters() {
+  const term = searchTerm.toLowerCase();
+  markers.forEach(m => {
+    const matchSize = activeFilter === 'Todas' || m.data.Tamaño === activeFilter;
+    const matchSearch = !term || m.data.Nombre.toLowerCase().includes(term) || m.data.Razón.toLowerCase().includes(term);
+    m.visible = matchSize && matchSearch;
+    if (m.visible) {
+      m.marker.addTo(map);
+    } else {
+      m.marker.remove();
+    }
+  });
+  renderList(markers);
+}
+
+// Filter buttons
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.size;
+    applyFilters();
+  });
+});
+
+// Search
+document.getElementById('search').addEventListener('input', e => {
+  searchTerm = e.target.value;
+  applyFilters();
+});
+
+// Sidebar toggle (works on all screen sizes)
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('overlay');
+  const btn = document.getElementById('toggle-btn');
+  const isMobile = window.innerWidth <= 700;
+
+  if (isMobile) {
+    const open = sidebar.classList.toggle('open');
+    overlay.classList.toggle('open', open);
+    btn.textContent = open ? '✕' : '☰';
+  } else {
+    const collapsed = sidebar.classList.toggle('collapsed');
+    btn.textContent = collapsed ? '☰' : '✕';
+    btn.style.left = collapsed ? '14px' : (320 + 14) + 'px';
+  }
+}
+
+// Set initial toggle button position on desktop
+window.addEventListener('load', () => {
+  if (window.innerWidth > 700) {
+    document.getElementById('toggle-btn').style.left = (320 + 14) + 'px';
+    document.getElementById('toggle-btn').textContent = '✕';
+  }
+});
+
+// Auto-close sidebar on item click on mobile
+function closeSidebarOnMobile() {
+  if (window.innerWidth <= 700) {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar.classList.contains('open')) toggleSidebar();
+  }
+}
+
+// Initial render
+renderList(markers);
+</script>
+</body>
+</html>
